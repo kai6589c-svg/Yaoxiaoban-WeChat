@@ -38,6 +38,7 @@ interface FormPage {
     times: string[];
   };
   setData(values: Record<string, unknown>, callback?: () => void): void;
+  onLoad(options: Record<string, string>): Promise<void>;
   buildDraft(): MedicationDraft;
   save(): Promise<void>;
   addTime(): void;
@@ -390,4 +391,53 @@ describe("药盒表单保存恢复", () => {
     expect((await service.bootstrap()).plans[0]?.times).toContain("09:35");
     expect(page.data.saving).toBe(false);
   });
+});
+
+it("new-box form reads the current account source and clears all per-box state", async () => {
+  const saved = await service.saveMedication({
+    ...page.buildDraft(),
+    storageLocation: "客厅",
+    initialQuantityMilli: 18000,
+  });
+  page.data = structuredClone(definition.data);
+  await page.onLoad({ copyFrom: saved.medicationId });
+  const draft = page.buildDraft();
+  expect(draft.id).toBeUndefined();
+  expect(draft).toMatchObject({
+    name: "照片回归测试药盒",
+    storageLocation: "客厅",
+    mode: "expiry_only",
+    expiryValue: "",
+    openedDate: null,
+    afterOpenDays: null,
+    initialQuantityMilli: null,
+    schedule: null,
+  });
+  expect(page.data.photoTempPath).toBe("");
+  const state = await service.bootstrap();
+  expect(state.medications).toHaveLength(1);
+  expect(state.snapshots[0]?.quantityMilli).toBe(18000);
+});
+it("local old-client edit preserves location and explicit blank clears it", async () => {
+  const draft = page.buildDraft();
+  const saved = await service.saveMedication({
+    ...draft,
+    storageLocation: "客厅",
+  });
+  const med = saved.state.medications[0]!;
+  const { storageLocation: _location, ...oldDraft } = draft;
+  void _location;
+  const edited = await service.saveMedication({
+    ...oldDraft,
+    id: med.id,
+    expectedVersion: med.version,
+  });
+  expect(edited.state.medications[0]?.storageLocation).toBe("客厅");
+  const cleared = await service.saveMedication({
+    ...draft,
+    id: med.id,
+    expectedVersion: edited.state.medications[0]!.version,
+    storageLocation: "",
+  });
+  expect(cleared.state.medications[0]?.storageLocation).toBe("");
 });

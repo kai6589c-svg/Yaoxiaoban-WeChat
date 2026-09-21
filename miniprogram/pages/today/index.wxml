@@ -59,7 +59,9 @@
         <view class="card-section-title">今天的计划</view>
         <button class="plain-link" bindtap="openHistory">查看记录 <text>›</text></button>
       </view>
-      <view wx:for="{{allTasks}}" wx:key="key" class="task-row">
+      <block wx:for="{{allTasks}}" wx:key="key">
+      <view wx:if="{{item.showGroupHeading}}" class="task-group-title">{{item.groupLabel}}</view>
+      <view class="task-row">
         <view class="task-time">{{item.timeText}}</view>
         <view class="task-main">
           <view class="task-title">
@@ -76,7 +78,7 @@
             bindtap="recordTask"
           >记为未服</button>
           <button
-            wx:if="{{item.isRecorded}}"
+            wx:if="{{item.isRecorded && item.logId}}"
             class="undo-link"
             data-log-id="{{item.logId}}"
             disabled="{{busyKey}}"
@@ -90,7 +92,7 @@
           data-status="taken"
           disabled="{{busyKey}}"
           bindtap="recordTask"
-          aria-label="记录已服"
+          aria-label="将{{item.medicationName}} {{item.time}}的安排记录为已服"
         ></button>
         <view
           wx:elif="{{item.needsExpiryReview}}"
@@ -102,6 +104,7 @@
         >!</view>
         <view wx:else class="task-status-icon {{item.statusClass}}">{{item.statusClass === 'taken' ? '✓' : item.statusClass === 'skipped' ? '×' : ''}}</view>
       </view>
+      </block>
     </view>
 
     <block wx:if="{{risks.length}}">

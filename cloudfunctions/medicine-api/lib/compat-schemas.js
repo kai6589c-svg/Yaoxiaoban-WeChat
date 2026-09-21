@@ -204,6 +204,7 @@ function parseMedication(payload) {
     "profileId",
     "name",
     "specification",
+    "storageLocation",
     "unit",
     "mode",
     "expiryPrecision",
@@ -277,6 +278,15 @@ function parseMedication(payload) {
     openedDate,
     afterOpenDays,
     note: emptyString(payload.note, "note", 300),
+    ...(payload.storageLocation !== undefined
+      ? {
+          storageLocation: emptyString(
+            payload.storageLocation,
+            "storageLocation",
+            30,
+          ),
+        }
+      : {}),
     expectedVersion,
     initialQuantityMilli,
     schedule,

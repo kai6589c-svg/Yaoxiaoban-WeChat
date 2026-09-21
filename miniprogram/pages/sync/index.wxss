@@ -36,3 +36,12 @@
   padding: 24rpx;
   background: #fff4dc;
 }
+
+.page {
+  font-size: calc(28rpx * var(--text-scale, 1));
+}
+.card button {
+  min-height: 44px;
+  padding: 16rpx;
+  font-size: inherit;
+}

@@ -1,3 +1,4 @@
+import { groupTodayTasks, taskStatusText } from "../../core/task-presentation";
 import { getIntakeQueue } from "../../services/intake-queue";
 import { buildTodayDashboard } from "../../core/dashboard";
 import {
@@ -59,7 +60,7 @@ const mapTask = (task: TodayTask, nowMs: number): TaskView => {
     ...task,
     doseText: formatDose(task.doseMilli, task.unit),
     timeText: task.time,
-    statusText: status.text,
+    statusText: taskStatusText(task),
     statusClass: status.className,
     canRecord: canRecordNow,
     canSkip: task.status === "due",
@@ -117,7 +118,7 @@ Page({
         : task;
     });
     this.setData({
-      allTasks: tasks,
+      allTasks: groupTodayTasks(tasks),
       pendingTasks: tasks.filter(
         (task) => !task.isRecorded && !task.needsExpiryReview,
       ),
@@ -181,7 +182,7 @@ Page({
       this.setData({
         loading: false,
         dateText: `${formatShortChineseDate(today)} · ${weekdayNames[dayOfWeek(today) - 1]}`,
-        allTasks: tasks,
+        allTasks: groupTodayTasks(tasks),
         pendingTasks: tasks.filter(
           (task) => !task.isRecorded && !task.needsExpiryReview,
         ),

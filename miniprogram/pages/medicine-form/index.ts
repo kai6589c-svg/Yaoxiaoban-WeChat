@@ -1,3 +1,6 @@
+import { newBoxPrefill } from "../../core/medication-copy";
+import { buildPlanPreview } from "../../core/plan-preview";
+import { saveJobView } from "../../services/save-job-view";
 import {
   getSaveQueue,
   observeSave,
@@ -80,8 +83,15 @@ const formatDecimal = (value: number): string =>
 Page({
   data: {
     loading: true,
+    copyFromId: "",
+    storageLocation: "",
+    locationSuggestions: [] as string[],
     error: "",
     saveError: "",
+    planPreview: {
+      days: [] as Array<{ date: string; text: string }>,
+      message: "",
+    },
     photoSaveWarning: "",
     pendingSaveId: "",
     saving: false,
@@ -137,6 +147,9 @@ Page({
 
   async onLoad(options: Record<string, string | undefined>) {
     const medicationId = options["id"] ?? "";
+    this.setData({
+      copyFromId: medicationId ? "" : (options["copyFrom"] ?? ""),
+    });
     if (medicationId) {
       this.setData({ editing: true, medicationId });
       void wx.setNavigationBarTitle({ title: "编辑药盒" });
@@ -148,6 +161,15 @@ Page({
     this.setData({ loading: true, error: "" });
     try {
       const state = await getApp<IAppOption>().getService().bootstrap();
+      this.setData({
+        locationSuggestions: [
+          ...new Set(
+            state.medications
+              .map((item) => item.storageLocation?.trim() ?? "")
+              .filter(Boolean),
+          ),
+        ].slice(0, 8),
+      });
       const profiles = state.profiles
         .filter((item) => !item.archivedAt)
         .map(({ id, name }) => ({ id, name }));
@@ -164,6 +186,34 @@ Page({
           loading: false,
           formState: FORM_STATE.CLEAN,
         });
+        if (this.data.copyFromId) {
+          const source = state.medications.find(
+            (item) => item.id === this.data.copyFromId,
+          );
+          if (!source) throw new Error("原药盒不存在，请从药箱重新选择");
+          const prefill = newBoxPrefill(source);
+          const profileIndex = profiles.findIndex(
+            (item) => item.id === prefill.profileId,
+          );
+          if (profileIndex < 0)
+            throw new Error("所属成员已归档，请先选择活动成员");
+          const unitOptions =
+            this.data.unitOptions.includes(prefill.unit) || !prefill.unit
+              ? this.data.unitOptions
+              : [...this.data.unitOptions, prefill.unit];
+          this.setData({
+            name: prefill.name,
+            specification: prefill.specification,
+            storageLocation: prefill.storageLocation,
+            profileIndex,
+            unitOptions,
+            unitIndex: unitOptions.indexOf(prefill.unit),
+            expiryValue: "",
+            quantity: "",
+            usageMode: "expiry_only",
+            formState: FORM_STATE.DIRTY,
+          });
+        }
       }
     } catch (error) {
       showError(error, "没有加载成功");
@@ -244,6 +294,7 @@ Page({
         profileIndex,
         name: medication.name,
         specification: medication.specification,
+        storageLocation: medication.storageLocation ?? "",
         note: medication.note,
         detailsOpen: Boolean(medication.specification || medication.note),
         expiryPrecision: medication.expiryPrecision,
@@ -286,7 +337,10 @@ Page({
         photoSizeText: "",
         formState: FORM_STATE.CLEAN,
       },
-      () => this.refreshExpiryPreview(),
+      () => {
+        this.refreshExpiryPreview();
+        this.refreshPlanPreview();
+      },
     );
   },
 
@@ -312,7 +366,10 @@ Page({
         // save errors remains available independently.
       }
     }
-    this.setData({ ...patch, formState: FORM_STATE.DIRTY }, callback);
+    this.setData({ ...patch, formState: FORM_STATE.DIRTY }, () => {
+      callback?.();
+      this.refreshPlanPreview();
+    });
   },
 
   /**
@@ -354,6 +411,14 @@ Page({
     this.updateDraft({ specification: event.detail.value });
   },
 
+  onLocationInput(event: WechatMiniprogram.CustomEvent<{ value: string }>) {
+    this.updateDraft({ storageLocation: event.detail.value });
+  },
+  chooseLocation(event: WechatMiniprogram.BaseEvent) {
+    this.updateDraft({
+      storageLocation: String(event.currentTarget.dataset["location"] ?? ""),
+    });
+  },
   onNoteInput(event: WechatMiniprogram.CustomEvent<{ value: string }>) {
     this.updateDraft({ note: event.detail.value });
   },
@@ -706,6 +771,10 @@ Page({
     });
   },
 
+  refreshPlanPreview() {
+    this.setData({ planPreview: buildPlanPreview(this.buildDraft()) });
+  },
+
   buildDraft(): MedicationDraft {
     const profile = this.data.profiles[this.data.profileIndex];
     const quantityMilli = decimalToMilli(this.data.quantity);
@@ -717,6 +786,7 @@ Page({
       profileId: profile?.id ?? "",
       name: this.data.name,
       specification: this.data.specification,
+      storageLocation: this.data.storageLocation,
       unit,
       mode,
       expiryPrecision: this.data.expiryPrecision,
@@ -1017,11 +1087,7 @@ Page({
         }
       } else {
         this.setData({
-          photoSaveWarning: current.terminal
-            ? current.message
-            : current.medicationId
-              ? "药盒已保存，照片待同步。可离开此页，在待同步列表中继续。"
-              : "保存结果待确认。任务已保存在本机，可在待同步列表中继续。",
+          photoSaveWarning: `${saveJobView(current).message}。任务已保存在本机，可在待同步列表中继续。`,
           formState: FORM_STATE.SAVED,
         });
         this.clearLeaveGuard();

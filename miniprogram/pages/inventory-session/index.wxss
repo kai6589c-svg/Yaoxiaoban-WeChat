@@ -1,0 +1,21 @@
+.card {
+  margin-top: 28rpx;
+}
+input {
+  min-height: 96rpx;
+  margin: 24rpx 0;
+  border-bottom: 1rpx solid #d9e3dc;
+}
+button {
+  margin-top: 24rpx;
+  min-height: 88rpx;
+}
+
+.page {
+  font-size: calc(28rpx * var(--text-scale, 1));
+}
+.card button {
+  min-height: 44px;
+  padding: 16rpx;
+  font-size: inherit;
+}

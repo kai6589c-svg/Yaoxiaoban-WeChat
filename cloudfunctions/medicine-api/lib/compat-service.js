@@ -835,6 +835,9 @@ function medicationPatch(draft) {
     profileId: draft.profileId,
     name: draft.name,
     specification: draft.specification,
+    ...(draft.storageLocation !== undefined
+      ? { storageLocation: draft.storageLocation }
+      : {}),
     unit: draft.unit || null,
     mode: draft.mode,
     expiry: { precision: draft.expiryPrecision, value: draft.expiryValue },
@@ -900,6 +903,7 @@ function toMedication(item) {
     profileId: item.profileId,
     name: item.name,
     specification: item.specification ?? "",
+    storageLocation: item.storageLocation ?? "",
     unit: item.unit ?? "",
     mode: item.mode ?? (item.activePlanId ? "scheduled" : "expiry_only"),
     expiryPrecision: item.expiry?.precision ?? "day",

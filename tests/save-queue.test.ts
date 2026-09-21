@@ -89,6 +89,9 @@ beforeEach(async () => {
       }),
     },
     getFileSystemManager: () => ({
+      accessSync: (path: string) => {
+        if (!files.has(path)) throw new Error("missing");
+      },
       copyFileSync: (_src: string, dst: string) => files.add(dst),
       unlinkSync: (path: string) => files.delete(path),
       getFileInfo: (args: { success: (value: { size: number }) => void }) =>
@@ -272,4 +275,101 @@ it("uses the ticket returned with field confirmation without another prepare RPC
   expect(calls.some((call) => call.action === "prepareMedicationPhoto")).toBe(
     false,
   );
+});
+it("missing local image is recoverable with a new request, without resaving fields", async () => {
+  const original = handler;
+  handler = (data) =>
+    data.action === "bootstrap"
+      ? ok({ ...bootstrap, medications: [saved] })
+      : original(data);
+  const queue = new SaveQueue(service);
+  const job = queue.start(draft, "/tmp/old.jpg", "replace");
+  files.clear();
+  const failed = await queue.run(job.id);
+  expect(failed.failureCode).toBe("LOCAL_FILE_MISSING");
+  expect(failed.failureStage).toBe("photo");
+  const repaired = await queue.reselectPhoto(job.id, "/tmp/new.jpg");
+  expect(repaired.id).not.toBe(job.id);
+  expect(repaired.status).toBe("ready");
+  expect(
+    calls.filter((call) => call.action === "saveMedicationFast"),
+  ).toHaveLength(1);
+});
+it("reselection reconciles a previously attached ticket without changing the photo", async () => {
+  const original = handler;
+  handler = (data) =>
+    data.action === "completeMedicationPhotoUpload"
+      ? new Promise(() => {})
+      : original(data);
+  const queue = new SaveQueue(service);
+  const job = queue.start(draft, "/tmp/old.jpg", "replace");
+  const work = queue.run(job.id);
+  await vi.advanceTimersByTimeAsync(10000);
+  await work;
+  handler = original;
+  const repaired = await queue.reselectPhoto(job.id, "/tmp/new.jpg");
+  expect(repaired.id).toBe(job.id);
+  expect(repaired.status).toBe("ready");
+  expect(
+    calls.filter((call) => call.action === "completeMedicationPhotoUpload"),
+  ).toHaveLength(1);
+  expect(
+    calls.filter((call) => call.action === "discardMedicationPhoto"),
+  ).toHaveLength(0);
+});
+it("reselection refuses a changed box version without sending any replacement upload", async () => {
+  const original = handler;
+  handler = (data) =>
+    data.action === "bootstrap"
+      ? ok({ ...bootstrap, medications: [{ ...saved, version: 3 }] })
+      : original(data);
+  const queue = new SaveQueue(service);
+  const job = queue.start(draft, "/tmp/old.jpg", "replace");
+  files.clear();
+  await queue.run(job.id);
+  await expect(
+    queue.reselectPhoto(job.id, "/tmp/new.jpg"),
+  ).rejects.toMatchObject({ code: "VERSION_CONFLICT" });
+  expect(
+    calls.filter((call) => call.action === "prepareMedicationPhoto"),
+  ).toHaveLength(0);
+  expect(queue.list()[0]?.id).toBe(job.id);
+});
+it("reselection waits for old ticket cleanup before using a new upload request", async () => {
+  const original = handler;
+  let discarded = false;
+  handler = (data) => {
+    if (data.action === "completeMedicationPhotoUpload")
+      return new Promise(() => {});
+    if (data.action === "bootstrap")
+      return ok({ ...bootstrap, medications: [saved] });
+    if (data.action === "getMedicationPhotoStatus")
+      return ok({ status: discarded ? "deleted" : "prepared" });
+    if (data.action === "discardMedicationPhoto") {
+      discarded = true;
+      return ok({ discarded: true });
+    }
+    return original(data);
+  };
+  const queue = new SaveQueue(service);
+  const job = queue.start(draft, "/tmp/old.jpg", "replace");
+  const work = queue.run(job.id);
+  await vi.advanceTimersByTimeAsync(10000);
+  await work;
+  const repairHandler = handler;
+  handler = (data) =>
+    data.action === "completeMedicationPhotoUpload"
+      ? original(data)
+      : repairHandler(data);
+  const repaired = await queue.reselectPhoto(job.id, "/tmp/new.jpg");
+  expect(discarded).toBe(true);
+  expect(repaired.status).toBe("ready");
+  const prepares = calls.filter(
+    (call) => call.action === "prepareMedicationPhoto",
+  );
+  expect(prepares).toHaveLength(2);
+  expect(prepares[0]?.requestId).not.toBe(prepares[1]?.requestId);
+  expect(
+    calls.filter((call) => call.action === "saveMedicationFast"),
+  ).toHaveLength(1);
 });

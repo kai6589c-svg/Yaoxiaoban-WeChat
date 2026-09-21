@@ -52,6 +52,7 @@ export interface Medication {
   profileId: string;
   name: string;
   specification: string;
+  storageLocation?: string;
   unit: string;
   mode: MedicationMode;
   expiryPrecision: DatePrecision;
@@ -135,6 +136,7 @@ export interface MedicationDraft {
   profileId: string;
   name: string;
   specification: string;
+  storageLocation?: string;
   unit: string;
   mode: MedicationMode;
   expiryPrecision: DatePrecision;

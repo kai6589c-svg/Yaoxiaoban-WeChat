@@ -180,3 +180,62 @@ test("前端 DataService 契约返回完整 AppState 和 milli 单位", async ()
   assert.equal(state.intakeLogs.length, 0);
   assert.equal(state.calendarExports.length, 0);
 });
+
+test("storage location round trips through normal/fast saves and survives an older client edit", async () => {
+  const store = new MemoryStore();
+  const clock = () => new Date("2026-09-16T00:00:00Z");
+  const compat = new CompatibilityService(
+    store,
+    new MedicineService(store, { clock, logger: { warn() {} } }),
+    { clock },
+  );
+  const context = (requestId) => ({ accountId: "acct_location", requestId });
+  await compat.execute("bootstrap", {}, context(null));
+  const state = await compat.execute(
+    "acceptPrivacy",
+    { version: "2026-08-01" },
+    context("location-privacy-001"),
+  );
+  const draft = {
+    profileId: state.profiles[0].id,
+    name: "药盒",
+    specification: "10mg",
+    unit: "片",
+    mode: "expiry_only",
+    expiryPrecision: "day",
+    expiryValue: "2027-01-01",
+    openedDate: null,
+    afterOpenDays: null,
+    note: "",
+    schedule: null,
+  };
+  const saved = await compat.execute(
+    "saveMedication",
+    { ...draft, storageLocation: "客厅" },
+    context("location-create-001"),
+  );
+  let med = saved.state.medications[0];
+  assert.equal(med.storageLocation, "客厅");
+  const updated = await compat.execute(
+    "saveMedicationFast",
+    { ...draft, id: med.id, expectedVersion: med.version, name: "更新药盒" },
+    context("location-update-001"),
+  );
+  med = updated.medication;
+  assert.equal(med.storageLocation, "客厅");
+  const cleared = await compat.execute(
+    "saveMedicationFast",
+    { ...draft, id: med.id, expectedVersion: med.version, storageLocation: "" },
+    context("location-clear-001"),
+  );
+  assert.equal(cleared.medication.storageLocation, "");
+  const { parseCompatAction } = require("../lib/compat-schemas");
+  assert.throws(
+    () =>
+      parseCompatAction("saveMedication", {
+        ...draft,
+        storageLocation: "长".repeat(31),
+      }),
+    (error) => error.code === "INVALID_ARGUMENT",
+  );
+});

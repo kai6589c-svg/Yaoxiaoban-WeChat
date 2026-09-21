@@ -1,0 +1,17 @@
+<view style="--text-scale: {{textScale || 1}};" class="page"><app-nav spacer="{{true}}" />
+  <view class="page-title">集中盘点</view>
+  <view class="page-subtitle">进度保存在本机；每盒由你确认后才更新实际余量。</view>
+  <view wx:if="{{loading}}" class="card">正在加载…</view>
+  <view wx:elif="{{error}}" class="card">{{error}}<button bindtap="refresh">重新加载</button></view>
+  <view wx:elif="{{finished}}" class="card">本次已确认 {{completed}} / {{total}} 盒<button bindtap="finish">结束盘点</button></view>
+  <view wx:else class="card">
+    <view>第 {{index + 1}} / {{total}} 盒 · 已确认 {{completed}} 盒</view>
+    <view class="page-title">{{name}}</view>
+    <view>实际数量（{{unit}}）</view>
+    <input type="digit" value="{{quantity}}" disabled="{{pending || saving}}" bindinput="onQuantityInput" placeholder="请填写实际数过的余量" aria-label="实际数量" />
+    <view wx:if="{{pending}}">上次结果尚未确认，数量已锁定。重试核对不会重复盘点。</view>
+    <button class="primary-button" bindtap="confirm" loading="{{saving}}" disabled="{{saving}}">{{pending ? '重试核对这次盘点' : '确认这一盒'}}</button>
+    <button bindtap="skip" disabled="{{pending || saving}}">暂时跳过</button>
+    <button bindtap="finish" disabled="{{pending || saving}}">结束本次盘点</button>
+  </view>
+</view>

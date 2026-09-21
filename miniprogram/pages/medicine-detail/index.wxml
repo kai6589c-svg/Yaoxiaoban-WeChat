@@ -86,6 +86,7 @@
         <view wx:if="{{view.photoUrl}}" class="photo-saved">照片已保存</view>
         <view class="detail-name">{{view.name}}</view>
         <view class="detail-profile">{{view.profileName}} · {{view.specification}}</view>
+        <view class="detail-profile">存放位置：{{view.storageLocation}}</view>
       </view>
       <view class="edit-button" bindtap="edit" role="button" hover-class="detail-pressed">编辑</view>
     </view>
@@ -109,7 +110,8 @@
 <template is="stock" data="{{view: view, busy: busy}}" />
 <template is="expiry" data="{{view: view, busy: busy}}" />
 </block>
-<block wx:else><template is="plan" data="{{view: view, busy: busy}}" />
+<block wx:else>
+<template is="plan" data="{{view: view, busy: busy}}" />
 <template is="stock" data="{{view: view, busy: busy}}" />
 <template is="expiry" data="{{view: view, busy: busy}}" />
 <template is="usage" data="{{view: view, busy: busy}}" />
@@ -118,6 +120,7 @@
     <view wx:if="{{view.note}}" class="section-title">我的备注</view>
     <view wx:if="{{view.note}}" class="card note-card">{{view.note}}</view>
 
+    <button class="secondary-button" bindtap="copyNewBox">又买了一盒</button>
     <view class="card action-list">
       <view class="section-card-title">记录</view>
       <view class="list-action" bindtap="history" role="button" hover-class="detail-pressed">

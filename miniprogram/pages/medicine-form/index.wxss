@@ -736,3 +736,28 @@
   flex-wrap: wrap;
   gap: 20rpx;
 }
+
+.plan-preview {
+  margin: 24rpx 0;
+  padding: 24rpx;
+}
+.preview-day {
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid #eee;
+  line-height: 1.6;
+}
+
+.location-field {
+  margin: 24rpx 0;
+  padding: 24rpx;
+}
+.location-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.location-suggestions button {
+  min-height: 44px;
+  padding: 16rpx;
+}

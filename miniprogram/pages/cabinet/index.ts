@@ -1,3 +1,7 @@
+import { medicationDisplayGroup } from "../../core/medication-copy";
+import { getSaveQueue } from "../../services/save-queue";
+import { saveJobView } from "../../services/save-job-view";
+import { getInventorySession } from "../../services/inventory-session";
 import {
   dateKeyFromMs,
   formatChineseDate,
@@ -27,6 +31,12 @@ interface MedicineCard {
   sortRank: number;
   updatedAt: string;
   searchText: string;
+  storageLocation: string;
+  syncText: string;
+  groupKey: string;
+  expiryDate: string;
+  groupHeading?: string;
+  groupHidden?: boolean;
 }
 
 interface ArchivedCard {
@@ -84,6 +94,10 @@ const medicationCard = (
 
   return {
     id: medication.id,
+    storageLocation: medication.storageLocation ?? "",
+    syncText: "",
+    groupKey: medicationDisplayGroup(medication),
+    expiryDate,
     name: medication.name,
     specification: medication.specification || "未填写规格",
     expiryFilter,
@@ -120,6 +134,7 @@ const medicationCard = (
       medication.name,
       medication.specification,
       medication.note,
+      medication.storageLocation ?? "",
       profile?.name ?? "",
     ]
       .join(" ")
@@ -130,6 +145,10 @@ const medicationCard = (
 Page({
   data: {
     loading: true,
+    locationOptions: ["全部位置"],
+    locationIndex: 0,
+    groupBoxes: false,
+    collapsedGroups: {} as Record<string, boolean>,
     error: "",
     query: "",
     selectedProfileId: "all",
@@ -162,9 +181,18 @@ Page({
         return;
       }
       const nowMs = Date.now();
+      const jobs = getSaveQueue(getApp<IAppOption>().getService()).list();
       const cards = state.medications
         .filter((item) => !item.archivedAt)
-        .map((item) => medicationCard(state, item, nowMs))
+        .map((item) => {
+          const card = medicationCard(state, item, nowMs);
+          const job = jobs.find(
+            (job) =>
+              job.status !== "ready" &&
+              (job.medicationId === item.id || job.draft.id === item.id),
+          );
+          return { ...card, syncText: job ? saveJobView(job).message : "" };
+        })
         .sort(
           (a, b) =>
             a.sortRank - b.sortRank || b.updatedAt.localeCompare(a.updatedAt),
@@ -175,6 +203,11 @@ Page({
           .filter((item) => !item.archivedAt)
           .map(({ id, name }) => ({ id, name })),
         allCards: cards,
+        locationOptions: [
+          "全部位置",
+          ...new Set(cards.map((card) => card.storageLocation).filter(Boolean)),
+        ],
+        locationIndex: 0,
         archivedCards: state.medications
           .filter((item) => Boolean(item.archivedAt))
           .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
@@ -215,6 +248,7 @@ Page({
       query: "",
       selectedProfileId: "all",
       selectedExpiry: "all",
+      locationIndex: 0,
     });
     this.applyFilters();
   },
@@ -241,6 +275,9 @@ Page({
       (item) =>
         (this.data.selectedProfileId === "all" ||
           item.profileId === this.data.selectedProfileId) &&
+        (this.data.locationIndex === 0 ||
+          item.storageLocation ===
+            this.data.locationOptions[this.data.locationIndex]) &&
         (!query || item.searchText.includes(query)),
     );
     this.setData({
@@ -250,14 +287,73 @@ Page({
           .length,
         expired: cards.filter((item) => item.expiryFilter === "expired").length,
       },
-      cards: cards.filter(
-        (item) =>
-          this.data.selectedExpiry === "all" ||
-          item.expiryFilter === this.data.selectedExpiry,
+      cards: this.organizeCards(
+        cards.filter(
+          (item) =>
+            this.data.selectedExpiry === "all" ||
+            item.expiryFilter === this.data.selectedExpiry,
+        ),
       ),
     });
   },
 
+  organizeCards(cards: MedicineCard[]): MedicineCard[] {
+    if (!this.data.groupBoxes)
+      return cards.map((card) => ({
+        ...card,
+        groupHeading: "",
+        groupHidden: false,
+      }));
+    const groups = new Map<string, MedicineCard[]>();
+    for (const card of cards)
+      groups.set(card.groupKey, [...(groups.get(card.groupKey) ?? []), card]);
+    return [...groups.values()].flatMap((group) =>
+      group
+        .sort(
+          (a, b) =>
+            a.expiryDate.localeCompare(b.expiryDate) ||
+            a.id.localeCompare(b.id),
+        )
+        .map((card, index) => ({
+          ...card,
+          groupHeading:
+            index === 0 && group.length > 1
+              ? `${card.name} · ${group.length} 盒（分别记录）`
+              : "",
+          groupHidden:
+            group.length > 1 &&
+            Boolean(this.data.collapsedGroups[card.groupKey]),
+        })),
+    );
+  },
+  changeLocation(event: WechatMiniprogram.CustomEvent<{ value: string }>) {
+    this.setData({ locationIndex: Number(event.detail.value) });
+    this.applyFilters();
+  },
+  toggleGrouping() {
+    this.setData({ groupBoxes: !this.data.groupBoxes });
+    this.applyFilters();
+  },
+  toggleGroup(event: WechatMiniprogram.BaseEvent) {
+    const key = String(event.currentTarget.dataset["group"] ?? "");
+    this.setData({
+      collapsedGroups: {
+        ...this.data.collapsedGroups,
+        [key]: !this.data.collapsedGroups[key],
+      },
+    });
+    this.applyFilters();
+  },
+  async startInventorySession() {
+    try {
+      const session = getInventorySession(getApp<IAppOption>().getService());
+      if (!session.load())
+        session.start(this.data.cards.map((card) => card.id));
+      await wx.navigateTo({ url: "/pages/inventory-session/index" });
+    } catch (error) {
+      showError(error);
+    }
+  },
   openMedicine(event: WechatMiniprogram.BaseEvent) {
     void wx.navigateTo({
       url: `/pages/medicine-detail/index?id=${String(event.currentTarget.dataset["id"] ?? "")}`,

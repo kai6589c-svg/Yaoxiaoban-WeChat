@@ -295,3 +295,23 @@ test("照片中转拒绝伪造路径和缺少可信身份", async () => {
     false,
   );
 });
+
+test("集中盘点稳定请求 ID 重试只执行一次写入且保留原始盘点时间", async () => {
+  const { handler, getServiceCalls } = fixture();
+  const event = {
+    action: "confirmInventory",
+    requestId: "inventory-stable-0001",
+    payload: {
+      medicationId: "med_test",
+      quantityMilli: 4125,
+      recordedAt: "2026-08-18T03:00:00.000Z",
+      requestId: "inventory-stable-0001",
+      note: "集中盘点",
+    },
+  };
+  const first = await handler(event);
+  assert.equal(first.ok, true);
+  assert.deepEqual(await handler(event), first);
+  assert.equal(getServiceCalls(), 1);
+  assert.equal(first.data.payload.recordedAt, event.payload.recordedAt);
+});

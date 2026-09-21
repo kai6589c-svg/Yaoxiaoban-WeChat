@@ -136,6 +136,11 @@ function medicationFields(payload, { partial = false } = {}) {
             integer: true,
           });
   }
+  if (payload.storageLocation !== undefined)
+    result.storageLocation =
+      v.optionalString(payload.storageLocation, "storageLocation", {
+        max: 30,
+      }) ?? "";
   if (payload.notes !== undefined)
     result.notes = v.optionalString(payload.notes, "notes", { max: 300 });
   return result;
@@ -146,6 +151,7 @@ function parseMedicationCreate(payload) {
     "profileId",
     "name",
     "specification",
+    "storageLocation",
     "unit",
     "expiry",
     "openedOn",
@@ -165,6 +171,7 @@ function parseMedicationUpdate(payload) {
     "profileId",
     "name",
     "specification",
+    "storageLocation",
     "unit",
     "expiry",
     "openedOn",

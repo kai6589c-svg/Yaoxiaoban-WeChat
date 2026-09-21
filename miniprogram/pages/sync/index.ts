@@ -1,3 +1,5 @@
+import { saveJobView } from "../../services/save-job-view";
+import { selectMedicationPhoto } from "../../services/medication-photo";
 import { getIntakeQueue } from "../../services/intake-queue";
 import {
   getSaveQueue,
@@ -14,6 +16,7 @@ Page({
       message: string;
       medicationId: string;
       canDiscard: boolean;
+      canReselect: boolean;
       terminal: boolean;
     }>,
     intakes: [] as Array<{
@@ -71,9 +74,10 @@ Page({
         .map((job) => ({
           id: job.id,
           name: job.draft.name,
-          message: job.message,
+          message: saveJobView(job).message,
           medicationId: job.medicationId ?? job.draft.id ?? "",
-          canDiscard: !job.uncertain || Boolean(job.medicationId),
+          canDiscard: saveJobView(job).canDiscard,
+          canReselect: saveJobView(job).canReselect,
           terminal: job.terminal,
         })),
     });
@@ -105,6 +109,29 @@ Page({
       this.refresh();
     } catch (error) {
       showError(error);
+    }
+  },
+  async reselectPhoto(event: WechatMiniprogram.BaseEvent) {
+    if (this.data.busy) return;
+    const id = String(event.currentTarget.dataset["id"] ?? "");
+    this.setData({ busy: id, error: "" });
+    try {
+      const selected = await selectMedicationPhoto();
+      if (!selected) return;
+      const deadline = Date.now() + SAVE_BUDGET_MS;
+      await observeSave(
+        getSaveQueue(getApp<IAppOption>().getService()).reselectPhoto(
+          id,
+          selected.tempFilePath,
+          deadline,
+        ),
+        deadline,
+      );
+      this.refresh();
+    } catch (error) {
+      showError(error);
+    } finally {
+      this.setData({ busy: "" });
     }
   },
   async retryJob(event: WechatMiniprogram.BaseEvent) {

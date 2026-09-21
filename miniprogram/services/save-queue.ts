@@ -34,6 +34,8 @@ export interface SaveJob {
   version?: number;
   ticket?: MedicationPhotoUploadTicket;
   derivativesDone?: boolean;
+  failureCode?: string;
+  failureStage?: "fields" | "photo";
 }
 const key = (scope: string) => `yaoxiaoban:save-queue-v1:${scope}`;
 const queues = new WeakMap<DataService, SaveQueue>();
@@ -245,6 +247,8 @@ export class SaveQueue {
           "任务已超过恢复期限，请联网核对药箱后重新编辑",
           false,
         );
+      job.failureCode = undefined;
+      job.failureStage = undefined;
       job.attempts++;
       job.status = job.medicationId ? "uploading" : "local";
       this.persist(job);
@@ -289,6 +293,14 @@ export class SaveQueue {
           }
         }
         if (job.status !== "ready") {
+          try {
+            wx.getFileSystemManager().accessSync(job.filePath);
+          } catch {
+            throw new ServiceError(
+              "LOCAL_FILE_MISSING",
+              "本机照片已丢失，请重新选择照片",
+            );
+          }
           job.status = "uploading";
           this.persist(job);
           const staged = await stageMedicationPhoto({
@@ -351,6 +363,8 @@ export class SaveQueue {
               true,
               "unknown",
             );
+      job.failureCode = failure.code;
+      job.failureStage = job.medicationId ? "photo" : "fields";
       job.uncertain = failure.outcome === "unknown";
       job.status = "failed";
       job.terminal =
@@ -384,6 +398,157 @@ export class SaveQueue {
       });
     }
     return job;
+  }
+  reselectPhoto(
+    id: string,
+    filePath: string,
+    deadlineAt = Date.now() + SAVE_BUDGET_MS,
+  ): Promise<SaveJob> {
+    if (this.running.has(id))
+      return Promise.reject(
+        new ServiceError("OPERATION_IN_PROGRESS", "任务仍在处理中，请稍后核对"),
+      );
+    const work = this.repairPhoto(id, filePath, deadlineAt).finally(() =>
+      this.running.delete(id),
+    );
+    this.running.set(id, work);
+    return work;
+  }
+  private async repairPhoto(
+    id: string,
+    filePath: string,
+    deadlineAt: number,
+  ): Promise<SaveJob> {
+    const job = this.list().find((item) => item.id === id);
+    if (!job?.medicationId || job.change !== "replace")
+      throw new ServiceError(
+        "OPERATION_IN_PROGRESS",
+        "请先确认药盒信息已保存，再补选照片",
+      );
+    if (job.status === "ready") return job;
+    const check = () => {
+      if (
+        this.service.syncScope !== job.scope ||
+        !this.list().some((item) => item.id === id)
+      )
+        throw new ServiceError("UNAUTHORIZED", "账号或任务已变化，请重新加载");
+      if (Date.now() >= deadlineAt)
+        throw new ServiceError(
+          "NETWORK",
+          "核对未完成，请稍后重试",
+          true,
+          "unknown",
+        );
+    };
+    const context = (stage: PhotoRpcContext["stage"]): PhotoRpcContext => ({
+      attemptId: job.id,
+      requestId: `${job.id}:repair:${stage}`,
+      stage,
+      deadlineAt,
+    });
+    const remoteStatus = async (stage: PhotoRpcContext["stage"]) => {
+      try {
+        return await this.service.getMedicationPhotoStatus(
+          job.medicationId!,
+          job.ticket!.mediaId,
+          context(stage),
+        );
+      } catch (error) {
+        if (error instanceof ServiceError && error.code === "MEDIA_NOT_FOUND")
+          return { status: "missing" };
+        throw error;
+      }
+    };
+    const markReady = () => {
+      job.status = "ready";
+      job.uncertain = false;
+      job.terminal = false;
+      job.message = "照片已保存";
+      job.failureCode = undefined;
+      this.persist(job);
+      if (this.removeFile(job.filePath)) {
+        job.filePath = "";
+        this.persist(job);
+      }
+      return job;
+    };
+    check();
+    if (job.ticket) {
+      const remote = await remoteStatus("retry_bootstrap");
+      check();
+      if (remote.status === "attached") return markReady();
+    }
+    const state = await this.service.bootstrap();
+    check();
+    const medication = state.medications.find(
+      (item) => item.id === job.medicationId,
+    );
+    if (!medication || medication.archivedAt)
+      throw new ServiceError("NOT_FOUND", "药盒已归档或不存在，请先核对");
+    if (medication.version !== job.version)
+      throw new ServiceError(
+        "VERSION_CONFLICT",
+        "药盒已变化，请核对后重新编辑",
+      );
+    if (job.ticket) {
+      await this.service.discardMedicationPhoto(
+        job.ticket.mediaId,
+        null,
+        context("discard"),
+      );
+      check();
+      const remote = await remoteStatus("read_back");
+      check();
+      if (remote.status === "attached") return markReady();
+      if (
+        !["cleanup_pending", "expired", "deleted", "missing"].includes(
+          remote.status,
+        )
+      )
+        throw new ServiceError(
+          "OPERATION_IN_PROGRESS",
+          "原照片任务尚未结束，请稍后核对",
+        );
+    }
+    const newId = createRequestId();
+    const durablePath = `${wx.env.USER_DATA_PATH}/yx-save-${newId}.jpg`;
+    try {
+      wx.getFileSystemManager().copyFileSync(filePath, durablePath);
+    } catch {
+      throw new ServiceError(
+        "INVALID_MEDIA",
+        "照片未能保存在本机，请检查空间后重试",
+      );
+    }
+    const replacement: SaveJob = {
+      ...job,
+      id: newId,
+      filePath: durablePath,
+      createdAt: Date.now(),
+      attempts: 0,
+      retryAt: 0,
+      status: "local",
+      uncertain: false,
+      terminal: false,
+      message: "药盒信息已保存，照片待同步",
+      ticket: undefined,
+      failureCode: undefined,
+      failureStage: undefined,
+      derivativesDone: false,
+    };
+    try {
+      check();
+      wx.setStorageSync(key(job.scope), [
+        ...this.list().filter((item) => item.id !== id),
+        replacement,
+      ]);
+    } catch (error) {
+      this.removeFile(durablePath);
+      throw error;
+    }
+    this.removeFile(job.filePath);
+    this.emit();
+    return this.run(replacement.id, deadlineAt);
   }
   async discard(id: string): Promise<void> {
     if (this.running.has(id))

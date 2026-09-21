@@ -26,7 +26,9 @@
       <view class="log-icon {{item.statusClass}}"><image src="{{item.iconPath}}" mode="aspectFit" /></view>
       <view class="log-main">
         <view class="log-title">{{item.title}}</view>
-        <view class="log-copy">{{item.detail}} · {{item.time}}</view>
+        <view class="log-copy">{{item.detail}}</view>
+        <view wx:if="{{item.scheduledTime}}" class="log-copy">计划时间：{{item.scheduledTime}}</view>
+        <view class="log-copy">记录时间：{{item.time}}</view>
       </view>
       <button class="undo-button" data-id="{{item.id}}" data-version="{{item.version}}" disabled="{{busyId}}" bindtap="undo">撤销</button>
     </view>

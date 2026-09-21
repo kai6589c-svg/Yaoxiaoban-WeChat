@@ -1,3 +1,4 @@
+import { saveJobView } from "../../services/save-job-view";
 import { buildReminderHealth } from "../../services/reminder-health";
 import { getSaveQueue } from "../../services/save-queue";
 import {
@@ -46,6 +47,7 @@ interface DetailView {
   name: string;
   profileName: string;
   specification: string;
+  storageLocation: string;
   expiryText: string;
   effectiveExpiryText: string;
   expirySourceText: string;
@@ -153,6 +155,7 @@ const buildView = (
     name: medication.name,
     profileName: profile?.name ?? "成员",
     specification: medication.specification || "未填写规格",
+    storageLocation: medication.storageLocation || "未填写位置",
     expiryText: formatChineseDate(
       medication.expiryValue,
       medication.expiryPrecision,
@@ -303,6 +306,11 @@ Page({
     await this.loadData();
   },
 
+  copyNewBox() {
+    void wx.navigateTo({
+      url: `/pages/medicine-form/index?copyFrom=${encodeURIComponent(this.data.medicationId)}`,
+    });
+  },
   async loadData() {
     this.setData({ loading: true, error: "" });
     try {
@@ -315,7 +323,9 @@ Page({
             (job.medicationId === this.data.medicationId ||
               job.draft.id === this.data.medicationId),
         );
-      this.setData({ photoSyncText: pendingPhoto?.message ?? "" });
+      this.setData({
+        photoSyncText: pendingPhoto ? saveJobView(pendingPhoto).message : "",
+      });
       const medication = state.medications.find(
         (item) => item.id === this.data.medicationId,
       );

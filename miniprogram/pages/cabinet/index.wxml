@@ -42,6 +42,11 @@
     <button class="filter-chip {{selectedExpiry === 'expiring' ? 'active' : ''}}" data-id="expiring" bindtap="selectExpiry">即将到期 {{expiryCounts.expiring}}</button>
     <button class="filter-chip {{selectedExpiry === 'expired' ? 'active' : ''}}" data-id="expired" bindtap="selectExpiry">已到期 {{expiryCounts.expired}}</button>
   </view>
+  <view wx:if="{{!loading && !error}}" class="organize-controls">
+    <picker range="{{locationOptions}}" value="{{locationIndex}}" bindchange="changeLocation"><button>{{locationOptions[locationIndex]}}</button></picker>
+    <button bindtap="toggleGrouping">{{groupBoxes ? '取消同款分组' : '同款药盒分组'}}</button>
+    <button bindtap="startInventorySession">盘点当前筛选 / 继续盘点</button>
+  </view>
   <view wx:if="{{loading}}" class="loading-list">
     <view class="loading-card"></view>
     <view class="loading-card"></view>
@@ -70,9 +75,9 @@
   </view>
 
   <view wx:else class="medicine-list">
-    <view
-      wx:for="{{cards}}"
-      wx:key="id"
+    <block wx:for="{{cards}}" wx:key="id">
+    <button wx:if="{{item.groupHeading}}" data-group="{{item.groupKey}}" bindtap="toggleGroup">{{item.groupHeading}} · 展开/收起</button>
+    <view wx:if="{{!item.groupHidden}}"
       class="medicine-card card"
       data-id="{{item.id}}"
       bindtap="openMedicine"
@@ -94,6 +99,7 @@
           <image wx:else class="medicine-default-icon" src="/assets/ui/medkit.png" mode="aspectFit" aria-hidden="true" />
         </view>
         <view class="medicine-identity">
+          <view wx:if="{{item.storageLocation}}" class="medicine-member">位置：{{item.storageLocation}}</view><view wx:if="{{item.syncText}}" class="medicine-member">{{item.syncText}}</view>
           <view class="medicine-name">{{item.name}}</view><view class="medicine-member">{{item.specification}}</view>
           <view wx:if="{{profiles.length > 1}}" class="medicine-member">{{item.profileName}}</view>
         </view>
@@ -113,6 +119,7 @@
         </view>
       </view>
     </view>
+    </block>
   </view>
 
   <view wx:if="{{!loading && !error && archivedCards.length}}" class="archived-section">

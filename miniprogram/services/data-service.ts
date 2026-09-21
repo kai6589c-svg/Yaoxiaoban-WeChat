@@ -1,3 +1,4 @@
+import { clearInventorySession } from "./inventory-session";
 import { buildTodayDashboard, type TodayDashboard } from "../core/dashboard";
 import { cancelMedicationSync, clearAccountSync } from "./sync-lifecycle";
 import {
@@ -141,6 +142,7 @@ export type ServiceErrorCode =
   | "ACCOUNT_UNAVAILABLE"
   | "FORBIDDEN"
   | "PAYLOAD_TOO_LARGE"
+  | "LOCAL_FILE_MISSING"
   | "INVALID_MEDIA"
   | "INVALID_MEDIA_STATE"
   | "MEDIA_NOT_FOUND"
@@ -556,6 +558,9 @@ class LocalDataService implements DataService {
           profileId: draft.profileId,
           name: draft.name.trim(),
           specification: draft.specification.trim(),
+          ...(draft.storageLocation !== undefined
+            ? { storageLocation: draft.storageLocation.trim() }
+            : {}),
           unit: draft.unit.trim(),
           mode: draft.mode,
           expiryPrecision: draft.expiryPrecision,
@@ -577,6 +582,9 @@ class LocalDataService implements DataService {
           profileId: draft.profileId,
           name: draft.name.trim(),
           specification: draft.specification.trim(),
+          ...(draft.storageLocation !== undefined
+            ? { storageLocation: draft.storageLocation.trim() }
+            : {}),
           unit: draft.unit.trim(),
           mode: draft.mode,
           expiryPrecision: draft.expiryPrecision,
@@ -1138,6 +1146,7 @@ class LocalDataService implements DataService {
     );
     this.state = createEmptyState(nowIso());
     wx.removeStorageSync(STORAGE_KEY);
+    clearInventorySession(this);
     clearLocalCalendarLedger();
   }
 }
@@ -1698,6 +1707,7 @@ class CloudDataService implements DataService {
   async deleteAccount(): Promise<void> {
     clearAccountSync(this);
     await this.call<null>("deleteAccount");
+    if (this.syncScope) clearInventorySession(this);
     this.syncScope = undefined;
     this.lastState = undefined;
     clearLocalCalendarLedger();

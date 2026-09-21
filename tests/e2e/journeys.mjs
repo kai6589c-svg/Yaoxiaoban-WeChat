@@ -278,7 +278,7 @@ async function prepareLocalProject() {
     cwd: repositoryRoot,
     stdio: "inherit",
   });
-  temporaryProjectPath = path.join(repositoryRoot, ".e2e-project", "beta18");
+  temporaryProjectPath = path.join(repositoryRoot, ".e2e-project", "beta19");
   await rm(temporaryProjectPath, { recursive: true, force: true });
   await mkdir(temporaryProjectPath, { recursive: true });
   await mkdir(visualArtifactDirectory, { recursive: true });
@@ -298,16 +298,22 @@ async function prepareLocalProject() {
   const localRuntime = runtime
     .replace('deploymentMode: "production"', 'deploymentMode: "demo"')
     .replace(/cloudEnvId: "[^"]*"/, 'cloudEnvId: ""');
-  assert.notEqual(localRuntime, runtime, "E2E 本地运行配置没有成功生成");
+  assert.match(
+    localRuntime,
+    /deploymentMode: "demo"/,
+    "E2E 必须使用本机演示模式",
+  );
+  assert.match(localRuntime, /cloudEnvId: ""/, "E2E 不能连接生产云环境");
   await writeFile(runtimePath, localRuntime);
 
   const sourceProjectConfig = JSON.parse(
     await readFile(path.join(repositoryRoot, "project.config.json"), "utf8"),
   );
-  assert.match(sourceProjectConfig.appid, /^wx[0-9a-f]+$/, "生产 AppID 无效");
+  const appid = process.env["E2E_APP_ID"] || sourceProjectConfig.appid;
+  assert.match(appid, /^(wx[0-9a-f]+|touristappid)$/, "E2E AppID 无效");
 
   const projectConfig = {
-    appid: sourceProjectConfig.appid,
+    appid,
     projectname: "yaoxiaoban-e2e",
     description: "药小伴本地自动化验收工程",
     compileType: "miniprogram",
@@ -892,9 +898,49 @@ async function archiveRestoreAndDelete({ medicationId, planId }) {
   await captureVisual("10-cabinet-after-delete");
 }
 
+async function referenceIntegrationJourney() {
+  await fireRoute("switchTab", "/pages/cabinet/index", "打开药箱位置筛选");
+  let page = await loadedPage("pages/cabinet/index");
+  const cards = await page.data("allCards");
+  assert(cards.length > 0);
+  const sourceId = cards[0].id;
+  await page.callMethod("startInventorySession");
+  page = await loadedPage("pages/inventory-session/index");
+  await page.callMethod("onQuantityInput", { detail: { value: "4.125" } });
+  await page.callMethod("confirm");
+  assert.equal(await page.data("completed"), 1);
+  const state = await miniProgram.evaluate(() =>
+    getApp().getService().bootstrap(),
+  );
+  assert(
+    state.snapshots.some(
+      (item) => item.medicationId === sourceId && item.quantityMilli === 4125,
+    ),
+  );
+  await fireRoute(
+    "navigateTo",
+    `/pages/medicine-detail/index?id=${sourceId}`,
+    "打开原盒",
+  );
+  page = await loadedPage("pages/medicine-detail/index");
+  await page.callMethod("copyNewBox");
+  page = await loadedPage("pages/medicine-form/index");
+  assert.equal(await page.data("editing"), false);
+  assert.equal(await page.data("expiryValue"), "");
+  assert.equal(await page.data("quantity"), "");
+  assert.equal(await page.data("usageMode"), "expiry_only");
+  await page.callMethod("onLocationInput", { detail: { value: "客厅药箱" } });
+  assert.equal(
+    (await page.callMethod("buildDraft")).storageLocation,
+    "客厅药箱",
+  );
+  await page.callMethod("clearLeaveGuard");
+  console.log("[e2e] PASS 集中盘点 → 独立新盒预填 → 位置录入");
+}
+
 async function run() {
   if (reusePreparedProject) {
-    temporaryProjectPath = path.join(repositoryRoot, ".e2e-project", "beta18");
+    temporaryProjectPath = path.join(repositoryRoot, ".e2e-project", "beta19");
     try {
       await Promise.all([
         readFile(path.join(temporaryProjectPath, "project.config.json")),
@@ -921,6 +967,8 @@ async function run() {
 
   await addExpiryOnlyMedicineAndInventory();
   console.log("[e2e] PASS 新增只记效期药品 → 详情 → 盘点 → 药箱回访");
+
+  await referenceIntegrationJourney();
 
   // Resetting storage and the singleton service is enough to isolate the next
   // journey. Reusing the same DevTools connection avoids Nightly occasionally

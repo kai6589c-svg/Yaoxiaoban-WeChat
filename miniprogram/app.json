@@ -10,7 +10,8 @@
     "pages/profiles/index",
     "pages/settings/index",
     "pages/privacy/index",
-    "pages/sync/index"
+    "pages/sync/index",
+    "pages/inventory-session/index"
   ],
   "window": {
     "navigationStyle": "custom",

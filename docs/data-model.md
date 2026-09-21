@@ -41,6 +41,7 @@
   profileId: string;
   name: string;
   specification: string;
+  storageLocation?: string; // 去空格后最多 30 字，旧数据可缺省
   unit: string;
   mode: "expiry_only" | "scheduled" | "as_needed";
   expiryPrecision: "day" | "month";
@@ -130,3 +131,11 @@ manifest 中的 23 个索引覆盖：
 - 媒体按账号、药盒和状态定位待清理对象。
 
 幂等、账号和删除墓碑用确定性 `_id` 保证单键唯一，不依赖额外唯一索引。执行 `npm run verify:cloudbase-manifest` 可校验集合、索引、物理命名和客户端禁读写规则没有与仓库常量漂移；它不能代替在实际 CloudBase 控制台回读权限、索引可用状态和两账号隔离。
+
+## beta.19 存放位置与本机盘点会话
+
+`storageLocation` 是药盒可选字段。普通/快速兼容 RPC 与旧接口均支持；未传字段保留现值，明确传空字符串清除。本机模式、药箱搜索/筛选、详情和文字导出使用同一字段。无需数据库索引或历史迁移。
+
+集中盘点进度保存在 `yaoxiaoban_inventory_session:<scope>`，云端使用账号同步范围，本机演示使用独立 `local-demo` 范围。步骤保存药盒 ID、输入、预期版本/单位及 draft/pending/done/skipped 状态。提交前持久化固定 requestId 和 recordedAt；响应未知时锁定输入并用原请求重试，确认后才标记 done。草稿不会自动上传；清除会话不会删除正式快照。删除账号同时清除该范围本机进度。
+
+照片队列新增可选 failureCode/failureStage，保持旧任务兼容。重新选图前先核对旧票据、药盒版本并结束旧上传；替换任务使用新请求 ID 和票据，保留已确认的药盒 ID，不再次保存药盒字段或初始库存。

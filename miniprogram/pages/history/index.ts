@@ -12,6 +12,7 @@ interface LogView {
   title: string;
   detail: string;
   time: string;
+  scheduledTime: string;
   version: number;
   statusClass: "taken" | "skipped" | "extra";
   iconPath: string;
@@ -74,6 +75,9 @@ Page({
               title: `${medication.name} · ${statusText[log.status]}`,
               detail: `${state.profiles.find((item) => item.id === medication.profileId)?.name ?? "成员"} · ${formatDose(log.quantityMilli, medication.unit)}`,
               time: formatLocalDateTime(log.occurredAt),
+              scheduledTime: log.scheduledAt
+                ? formatLocalDateTime(log.scheduledAt)
+                : "",
               version: log.version,
               statusClass: log.status,
               iconPath:

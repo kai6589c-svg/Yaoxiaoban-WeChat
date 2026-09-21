@@ -314,6 +314,18 @@
       </view>
     </view>
 
+    <view wx:if="{{usageMode === 'scheduled'}}" class="card plan-preview" aria-label="未来七天计划预览">
+      <view class="card-section-title">未来 7 天安排</view>
+      <view wx:for="{{planPreview.days}}" wx:key="date" class="preview-day"><view>{{item.date}}</view><view>{{item.text}}</view></view>
+      <view class="inline-hint">{{planPreview.message || '填写计划后可预览安排'}}</view>
+    </view>
+    <view class="card location-field">
+      <view class="form-label">存放位置（可选）</view>
+      <input class="form-input" value="{{storageLocation}}" maxlength="30" placeholder="例如：客厅药箱、随身包" bindinput="onLocationInput" aria-label="存放位置" />
+      <view wx:if="{{fieldErrors.storageLocation}}" class="field-error">{{fieldErrors.storageLocation}}</view>
+      <view class="location-suggestions"><button wx:for="{{locationSuggestions}}" wx:key="*this" size="mini" data-location="{{item}}" bindtap="chooseLocation">{{item}}</button></view>
+    </view>
+    <view wx:if="{{copyFromId}}" class="inline-hint">正在添加新的一盒。请确认新盒有效期和数量；原盒的照片、计划和记录不会复制。</view>
     <view class="bottom-space"></view>
     <view class="sticky-save">
       <button wx:if="{{pendingSaveId}}" class="button-secondary" bindtap="openPendingSaves">查看待同步任务</button>

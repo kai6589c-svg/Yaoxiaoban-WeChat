@@ -1,4 +1,4 @@
-<view class="page subpage sync-page">
+<view style="--text-scale: {{textScale || 1}};" class="page subpage sync-page">
   <app-nav title="待同步任务" />
   <view class="hint">照片和记录暂存在这台设备。恢复网络或重新打开小程序后会继续同步。</view>
   <view wx:if="{{error}}" class="notice">{{error}}</view>
@@ -7,6 +7,7 @@
     <view class="name">{{item.name}}</view>
     <view class="message">{{item.message}}</view>
     <button wx:if="{{!item.terminal}}" disabled="{{!!busy}}" loading="{{busy === item.id}}" data-id="{{item.id}}" bindtap="retryJob">继续同步</button>
+    <button wx:if="{{item.canReselect}}" disabled="{{!!busy}}" data-id="{{item.id}}" bindtap="reselectPhoto">核对并重新选择照片</button>
     <button wx:if="{{item.medicationId}}" data-id="{{item.medicationId}}" bindtap="openMedicine">查看药盒</button>
     <button wx:if="{{item.canDiscard}}" disabled="{{!!busy}}" data-id="{{item.id}}" bindtap="discardJob">移除任务</button>
   </view>

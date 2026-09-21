@@ -20,6 +20,8 @@ export const validateMedicationDraft = (
   context: { today?: string } = {},
 ): ValidationResult => {
   const errors: Record<string, string> = {};
+  if ((draft.storageLocation?.trim().length ?? 0) > 30)
+    fail(errors, "storageLocation", "存放位置不能超过30个字");
   const name = draft.name.trim();
   if (!name) fail(errors, "name", "请填写药名");
   if (name.length > 40) fail(errors, "name", "药名不能超过40个字");
